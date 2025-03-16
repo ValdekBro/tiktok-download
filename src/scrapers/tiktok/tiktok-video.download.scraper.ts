@@ -21,11 +21,11 @@ export class TTVidoeDownloadScraper extends BaseScraper {
     public async scrapVideo(url: string) {
         const { page, i: pageIndex } = await this.pageManager
             .open(url)
-
         const videoLoc = page.locator(
             XPath.anywhere(
                 'video', 
                 { 
+                    position: "=1",
                     equal: { 
                         attr: 'mediatype', 
                         value: "video" 
@@ -34,11 +34,17 @@ export class TTVidoeDownloadScraper extends BaseScraper {
             )
                 .build()
         )
-        const videosList = await videoLoc.all()
-        if(!videosList.length)
-            return null
+        
+        await videoLoc.waitFor({ state: "attached", timeout: 5000 });
 
-        videosList[0].click({ button: "right" })
+        videoLoc.evaluate(elem => {
+            if(elem instanceof HTMLVideoElement) {
+                elem.muted = true;
+                elem.pause();
+            }
+        })
+
+        await videoLoc.click({ button: "right" })
 
         const downloadPromise = page.waitForEvent('download');
 

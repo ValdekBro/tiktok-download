@@ -21,6 +21,9 @@ export class PageManager {
     private readonly pagesRegistry: {
         [key: number]: PageManagerRegistryItem
     } = {}
+
+    private readonly queue: (() => Promise<void>)[] = []
+    private processingQueue = false
     
     constructor(
         private readonly browser: pw.Browser,
@@ -94,17 +97,36 @@ export class PageManager {
     public async init() {
         this.context = await this.browser.newContext({
             serviceWorkers: "block",
+            bypassCSP: true,
         });
     }
 
     public async destroy() {
-        await this.context.close()
+        try {
+            await this.context.close()
+        } catch(e) {
+            console.error("Failed to close browser context")
+        }
     }
 
     public async open(url: string) {
+        return new Promise<{ i: number, page: pw.Page }>((resolve, reject) => {
+            this.queue.push(async () => {
+                try {
+                    const result = await this.processOpen(url)
+                    resolve(result)
+                } catch (e) {
+                    reject(e)
+                }
+            })
+            this.processQueue()
+        })
+    }
+
+    private async processOpen(url: string) {
         const index = await this.waitForFreeIndex()
         this.reserveIndex(index)
-        const stopwatch = new Stopwatch();
+        const stopwatch = new Stopwatch()
         stopwatch.start()
 
         const timeLogger = setInterval(() => {
@@ -112,26 +134,38 @@ export class PageManager {
         }, 10 * 1000)
         let page: pw.Page = null
         try {
-            page = await this.context.newPage();
-            await page.route('**\/*.{png,jpg,jpeg,css,gif,avif}', route => route.abort())
-            await page.goto(url, { timeout: this.PAGE_LOAD_TIMEOUT_MSEC });
+            page = await this.context.newPage()
+            await page.route('**/*.{png,jpg,jpeg,css,gif,avif}', route => route.abort())
+            await page.goto(url, { timeout: this.PAGE_LOAD_TIMEOUT_MSEC, waitUntil: "commit" })
 
             clearInterval(timeLogger)
             this.setPage(index, page)
             return {
                 i: index,
                 page,
-            };
-        } catch(e) {
-            if(page) await page.close()
+            }
+        } catch (e) {
+            if (page) await page.close()
             clearInterval(timeLogger)
             this.clearIndex(index)
-           throw e
+            throw e
         }
     }
 
+    private async processQueue() {
+        if (this.processingQueue) return
+        this.processingQueue = true
+
+        while (this.queue.length > 0) {
+            const task = this.queue.shift()
+            if (task) await task()
+        }
+
+        this.processingQueue = false
+    }
+
     public async close(index: number) {
-        const page = await this.getPage(index);
+        const page = await this.getPage(index)
         await page.close()
         this.clearIndex(index)
     }

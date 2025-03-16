@@ -25,8 +25,8 @@ export const appInit = async () => {
         res.sendStatus(404)
     }
 
-    const launchOptions = {
-        headless: false,
+    const launchOptions: pw.LaunchOptions = {
+        headless: true,
     };
     
     console.log("Launching browser...")
@@ -48,14 +48,13 @@ export const appInit = async () => {
     ))
 
     const handleTikTokLink = async (link: string) => {
-        console.log("Creating page...")
+        console.log(`Scrapping ${link}`)
         const data = await ttScraper.scrapVideo(link)
         return data
     }
 
     bot.on(message('text'), async (ctx) => {
         if(TTVidoeDownloadScraper.isTikTokUrl(ctx.message.text)) {
-            ctx.reply("Бачу ТікТок посилання, чекай...")
             const data = await handleTikTokLink(ctx.message.text)
             if(data) {
                 await ctx.replyWithVideo({
@@ -82,12 +81,10 @@ export const appInit = async () => {
 process.once('SIGINT', async () => {
     bot.stop('SIGINT')
     console.log("Closing...")
-    await ttScraper.close()
     await browser.close()
 })
 process.once('SIGTERM', async () => {
     bot.stop('SIGTERM')
     console.log("Closing...")
-    await ttScraper.close()
     await browser.close()
 })
