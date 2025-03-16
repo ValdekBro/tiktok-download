@@ -41,10 +41,9 @@ export const appInit = async () => {
     await ttScraper.init()
 
     console.log("Launching Telegram bot...")
-    bot.start((ctx) => ctx.reply(`
-Помічниииик! 
-Відправ мені посилання на ТікТок, а я тобі відправлю відео! 
-Відправ мені фото і я перекладу тобі текст на ньому!`
+    bot.start((ctx) => ctx.reply("Помічниииик!\n"
+        + "Відправ мені посилання на ТікТок, а я тобі відправлю відео!\n"
+        // + "Відправ мені фото і я перекладу тобі текст на ньому!"
     ))
 
     const handleTikTokLink = async (link: string) => {

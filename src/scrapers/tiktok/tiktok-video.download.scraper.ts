@@ -21,6 +21,7 @@ export class TTVidoeDownloadScraper extends BaseScraper {
     public async scrapVideo(url: string) {
         const { page, i: pageIndex } = await this.pageManager
             .open(url)
+
         const videoLoc = page.locator(
             XPath.anywhere(
                 'video', 
@@ -46,8 +47,6 @@ export class TTVidoeDownloadScraper extends BaseScraper {
 
         await videoLoc.click({ button: "right" })
 
-        const downloadPromise = page.waitForEvent('download');
-
         const downloadButtonLoc = page.locator(
             XPath.anywhere(
                 'body',
@@ -57,15 +56,19 @@ export class TTVidoeDownloadScraper extends BaseScraper {
                 .child('li', { position: "=1" })
                 .build()
         )
+        
         const downloadButton = await downloadButtonLoc.first()
+        const downloadPromise = page.waitForEvent('download');
+        await downloadButton.waitFor({ state: "attached", timeout: 3000 });
         await downloadButton.click()
-
         const download = await downloadPromise;
 
         const readStream = await download.createReadStream();
+
         readStream.on('close', async () => {
             await this.pageManager.close(pageIndex)
         })
+        
         return readStream
     }
 
