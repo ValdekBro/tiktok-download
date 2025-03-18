@@ -7,9 +7,11 @@ enum XPathAttributes {
     CLASS = "class",
     ID = "id",
     INDEX = "index",
+    NOT = "not",
     POSITION = "position",
     CONTAINS = "contains",
     EQUAL = "equal",
+    HAS = "has",
 }
 
 interface XPathClassParam {
@@ -40,16 +42,24 @@ interface XPathEqualParam {
         value: string
     }
 }
+interface XPathExistParam {
+    [XPathAttributes.HAS]: string
+}
+interface XPathNotParam {
+    [XPathAttributes.NOT]: XPathAttrParam
+}
 
-
-type XPathAttrParam = Partial<
-    XPathClassParam 
+type XPathSelector = XPathClassParam 
     & XPathIdParam 
     & XPathPositionParam 
     & XPathContainsParam
     & XPathEqualParam
     // & XPathIndexParam
->
+    & XPathExistParam
+
+type XPathCondition = XPathNotParam
+
+type XPathAttrParam = Partial<XPathSelector & XPathCondition>
 type XPathParamWithAttr = XPathParam & XPathAttrParam
 
 export class XPath {
@@ -61,28 +71,45 @@ export class XPath {
     public static equal(attr: string, value: string) {
         return `@${attr}="${value}"`
     }
+    public static exist(attr: string) {
+        return `@${attr}`
+    }
 
     constructor(param: XPathParamWithAttr) {
         this.str = param.path
         this.str += param.node
+        const expression = this.parseParam(param)
+        if(expression.length)
+            this.str += `[${expression}]`
+    }
+
+    private parseParam(param: XPathAttrParam) {
+        let selectors = [];
         if(XPathAttributes.CONTAINS in param) {
             const { attr, value } = param[XPathAttributes.CONTAINS]
-            this.str += `[${XPath.contains(attr, value)}]`
+            selectors.push(XPath.contains(attr, value))
         }
         if(XPathAttributes.EQUAL in param) {
             const { attr, value } = param[XPathAttributes.EQUAL]
-            this.str += `[${XPath.contains(attr, value)}]`
+            selectors.push(XPath.contains(attr, value))
         }
 
         if(XPathAttributes.CLASS in param) {
-            this.str += `[${XPath.contains("class", param[XPathAttributes.CLASS])}]`
+            selectors.push(XPath.contains("class", param[XPathAttributes.CLASS]))
         } 
         if(XPathAttributes.ID in param) {
-            this.str += `[${XPath.equal("id", param[XPathAttributes.ID])}]`
+            selectors.push(XPath.equal("id", param[XPathAttributes.ID]))
         }
         if(XPathAttributes.POSITION in param) {
-            this.str += `[position()${param[XPathAttributes.POSITION]}]`
+            selectors.push(`position()${param[XPathAttributes.POSITION]}`)
         }
+        if(XPathAttributes.HAS in param) {
+            selectors.push(XPath.exist(param[XPathAttributes.HAS]))
+        }
+        if(XPathAttributes.NOT in param) {
+            selectors.push(`not(${this.parseParam(param[XPathAttributes.NOT])})`)
+        }
+        return selectors.join(' and ')
     }
     
     toString() {
@@ -90,7 +117,11 @@ export class XPath {
     }
 
     build() {
-        // console.log(`XPath build: ${this.toString()}`)
+        if(
+            process.env.NODE_ENV === 'development'
+            || process.env.NODE_ENV === 'test'
+        ) 
+            console.log(`XPath build: ${this.toString()}`)
         return this.toString()
     }
 

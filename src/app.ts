@@ -7,6 +7,7 @@ import { bot } from './telegram'
 import { message } from "telegraf/filters";
 import { PageManager } from './page-manager'
 import { TTVidoeDownloadScraper } from './scrapers/tiktok/tiktok-video.download.scraper'
+import { InputMediaPhoto } from 'telegraf/typings/core/types/typegram'
 
 export let browser: pw.Browser = null
 let ttScraper: TTVidoeDownloadScraper = null
@@ -26,7 +27,7 @@ export const appInit = async () => {
     }
 
     const launchOptions: pw.LaunchOptions = {
-        headless: true,
+        headless: process.env.NODE_ENV === 'production',
     };
     
     console.log("Launching browser...")
@@ -54,11 +55,22 @@ export const appInit = async () => {
 
     bot.on(message('text'), async (ctx) => {
         if(TTVidoeDownloadScraper.isTikTokUrl(ctx.message.text)) {
-            const data = await handleTikTokLink(ctx.message.text)
-            if(data) {
+            const result = await handleTikTokLink(ctx.message.text)
+            if(result.type === 'video') {
                 await ctx.replyWithVideo({
-                    source: data
+                    source: result.videoStream
                 })
+            } else if(result.type === 'slider') {
+                for (let i = 0; i < result.slidesUrls.length; i += 10) {
+                    const batch = result.slidesUrls.slice(i, i + 10)
+                    await ctx.replyWithMediaGroup(
+                        batch.map(url => ({
+                            type: "photo",
+                            media: url,
+                        }))
+                    )
+                    await ctx.replyWithAudio(result.soundUrl)
+                }
             } else {
                 await ctx.reply("Sorry, couldn't find video")
             }
@@ -87,3 +99,5 @@ process.once('SIGTERM', async () => {
     console.log("Closing...")
     await browser.close()
 })
+
+

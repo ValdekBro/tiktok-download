@@ -1,9 +1,11 @@
 import * as pw from 'playwright'
-import { wait } from '../../helpers'
 import { PageManager } from '../../page-manager'
 import { XPath } from '../../xpath-builder'
 import { BaseScraper } from '../base.scraper'
-import { URL } from 'node:url' // Add this import
+import { ITikTokSliderResult } from '../../types/tiktok-slider-result.interface'
+import { ITikTokVideoResult } from '../../types/tiktok-video-result.interface'
+
+
 
 export class TTVidoeDownloadScraper extends BaseScraper {
     constructor(
@@ -14,7 +16,7 @@ export class TTVidoeDownloadScraper extends BaseScraper {
     }
 
     public static isTikTokUrl(url: string): boolean {
-        const tiktokUrlPattern = /^(https?:\/\/)?(www\.)?(tiktok\.com\/(@[\w.-]+\/video\/\d+|v\/\d+|t\/[\w.-]+|embed\/v2\/\d+|@[\w.-]+|foryou|discover|music\/[\w.-]+|tag\/[\w.-]+|[\w.-]+)|vm\.tiktok\.com\/[\w.-]+\/?)$/
+        const tiktokUrlPattern = /^(https?:\/\/)?(www\.)?(tiktok\.com\/(@[\w.-]+\/video\/\d+|v\/\d+|t\/[\w.-]+|embed\/v2\/\d+|@[\w.-]+|foryou|discover|music\/[\w.-]+|tag\/[\w.-]+|[\w.-]+)|([\w-]+\.)*tiktok\.com\/[\w.-]+\/?)$/
         return tiktokUrlPattern.test(url)
     }
 
@@ -58,6 +60,36 @@ export class TTVidoeDownloadScraper extends BaseScraper {
             console.log("Sign in exit button IS found");
         } catch(e) {
             // console.log("Sign in exit button not found");
+        }
+    }
+
+    private async scrapFromSwiper(page: pw.Page) {
+        const swiperSlideLoc = page.locator(
+            XPath.anywhere(
+                'div',
+                {
+                    not: {
+                        class: "swiper-slide-duplicate"
+                    }
+                }
+            )
+                .child("img")
+                .build()
+        )
+        
+        const slides = await swiperSlideLoc.all();
+
+        const swiperAudioLoc = page.locator(
+            XPath.anywhere('audio').build()
+        )
+        const audio = await swiperAudioLoc.first();
+        const soundUrl = await audio.getAttribute("src")
+
+        return {
+            slidesUrls: await Promise.all(
+                slides.map(async slide => await slide.getAttribute("src"))
+            ),
+            soundUrl
         }
     }
 
@@ -106,11 +138,34 @@ export class TTVidoeDownloadScraper extends BaseScraper {
         const { page, i: pageIndex } = await this.pageManager
             .open(url)
         
-        page.evaluate(() => { window.localStorage.setItem("webapp-video-mute", `{"muted":true,"volume":0.4125,"unmuteTooltipTimestamp":1742142771580}`) })
-        
         this.closeCaptcha(page)
         this.closeSignInModal(page)
 
+        const swiperLoc = page.locator(
+            XPath.anywhere(
+                'div',
+                {
+                    equal: {
+                        attr: 'class',
+                        value: "swiper-wrapper"
+                    }
+                }
+            )
+                .build()
+        ).first()
+        
+        try {
+            await swiperLoc.waitFor({ state: "attached", timeout: 2000 });
+            const result = await this.scrapFromSwiper(page);
+            await this.pageManager.close(pageIndex)
+            return {
+                type: "slider",
+                ...result
+            } as ITikTokSliderResult
+        } catch(e) {
+            // console.log("Swiper not found");
+        }
+        
         const videoLoc = page.locator(
             XPath.anywhere(
                 'video', 
@@ -124,8 +179,8 @@ export class TTVidoeDownloadScraper extends BaseScraper {
             )
                 .build()
         ).first()
-        
-        await videoLoc.waitFor({ state: "attached", timeout: 5000 });
+
+        await videoLoc.waitFor({ state: "attached", timeout: 5000000 });
 
         const sourceLoc = videoLoc.locator(
             XPath.anywhere(
@@ -156,7 +211,10 @@ export class TTVidoeDownloadScraper extends BaseScraper {
             await this.pageManager.close(pageIndex)
         })
         
-        return readStream
+        return {
+            type: "video",
+            videoStream: readStream
+        } as ITikTokVideoResult
     }
 
     async close() {
