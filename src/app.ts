@@ -1,9 +1,9 @@
 import express from 'express'
 import { Request, Response, NextFunction } from 'express'
 import * as bodyParser from 'body-parser'
-import router from './router'
+import router from './server/router'
 import * as pw from 'playwright'
-import { bot } from './telegram'
+import { bot } from './server/telegram'
 import { message } from "telegraf/filters";
 import { PageManager } from './page-manager'
 import { TikTokScraper } from './scrapers/tiktok/tiktok.scraper'

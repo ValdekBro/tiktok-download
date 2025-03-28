@@ -1,4 +1,4 @@
-import { appInit } from './app'
+import { appInit } from '../app'
 import 'dotenv/config'
 
 const PORT = process.env.PORT
