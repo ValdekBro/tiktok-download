@@ -6,11 +6,11 @@ import * as pw from 'playwright'
 import { bot } from './telegram'
 import { message } from "telegraf/filters";
 import { PageManager } from './page-manager'
-import { TTVidoeDownloadScraper } from './scrapers/tiktok/tiktok-video.download.scraper'
-import { InputMediaPhoto } from 'telegraf/typings/core/types/typegram'
+import { TikTokScraper } from './scrapers/tiktok/tiktok.scraper'
+import { toBatches } from './helpers'
 
 export let browser: pw.Browser = null
-let ttScraper: TTVidoeDownloadScraper = null
+let ttScraper: TikTokScraper = null
 
 export const appInit = async () => {
     const app = express()
@@ -38,7 +38,7 @@ export const appInit = async () => {
         5
     )
 
-    ttScraper = new TTVidoeDownloadScraper(browser, pm)
+    ttScraper = new TikTokScraper(browser, pm)
     await ttScraper.init()
 
     console.log("Launching Telegram bot...")
@@ -47,32 +47,30 @@ export const appInit = async () => {
         // + "Відправ мені фото і я перекладу тобі текст на ньому!"
     ))
 
-    const handleTikTokLink = async (link: string) => {
-        console.log(`Scrapping ${link}`)
-        const data = await ttScraper.scrapVideo(link)
-        return data
-    }
-
     bot.on(message('text'), async (ctx) => {
-        if(TTVidoeDownloadScraper.isTikTokUrl(ctx.message.text)) {
-            const result = await handleTikTokLink(ctx.message.text)
-            if(result.type === 'video') {
-                await ctx.replyWithVideo({
-                    source: result.videoStream
-                })
-            } else if(result.type === 'slider') {
-                for (let i = 0; i < result.slidesUrls.length; i += 10) {
-                    const batch = result.slidesUrls.slice(i, i + 10)
-                    await ctx.replyWithMediaGroup(
-                        batch.map(url => ({
-                            type: "photo",
-                            media: url,
-                        }))
-                    )
+        if(TikTokScraper.isTikTokUrl(ctx.message.text)) {
+            const result = await ttScraper.scrap(ctx.message.text)
+
+            switch(result.type) {
+                case 'video':
+                    await ctx.replyWithVideo({
+                        source: result.videoStream
+                    })
+                    break
+                case 'slider':
+                    const groups = toBatches(result.slidesUrls, 10)
+                    for (const group of groups) {
+                        await ctx.replyWithMediaGroup(
+                            group.map(url => ({
+                                type: "photo",
+                                media: url,
+                            }))
+                        )
+                    }
                     await ctx.replyWithAudio(result.soundUrl)
-                }
-            } else {
-                await ctx.reply("Sorry, couldn't find video")
+                    break
+                default:
+                    await ctx.reply("Sorry, couldn't find video")
             }
         } else {
             await ctx.reply("Sorry, this is not a TikTok link");

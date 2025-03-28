@@ -22,6 +22,7 @@ export class PageManager {
         [key: number]: PageManagerRegistryItem
     } = {}
 
+    // TODO: reuse PromiseQueue here
     private readonly queue: (() => Promise<void>)[] = []
     private processingQueue = false
     
@@ -135,7 +136,6 @@ export class PageManager {
         let page: pw.Page = null
         try {
             page = await this.context.newPage()
-            await page.route('**/*.{png,jpg,jpeg,css,gif,avif}', route => route.abort())
             await page.goto(url, { timeout: this.PAGE_LOAD_TIMEOUT_MSEC, waitUntil: "commit" })
 
             clearInterval(timeLogger)

@@ -1,4 +1,4 @@
-import internal from "node:stream";
+import type internal from "node:stream";
 
 export interface ITikTokVideoResult {
     type: 'video'
